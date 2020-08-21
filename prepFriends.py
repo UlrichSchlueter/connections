@@ -2,15 +2,8 @@ import random
 import json
 import os
 import uliConfig
+from shardAdmin import Shard, ShardAdmin
 
-from couchbase.cluster import (
-    Cluster,
-    PasswordAuthenticator,
-    ClusterOptions,
-    BucketManager,
-    QueryIndexManager,
-)
-from couchbase.auth import PasswordAuthenticator
 
 friends = {}
 names = []
@@ -24,10 +17,7 @@ uc = uliConfig.UliConfig("config.sourceMe")
 
 
 namesFile = uc.get("MIL_TESTNAMESFILE")
-clusterName = uc.get("CBCLUSTER")
-cbadminuser = uc.get("CBCLUSTERUSER")
-cbadminpassword = uc.get("CBCLUSTERPASSWORD")
-cbbucket = uc.get("CBBUCKET")
+
 testnumbersfile = uc.get("MIL_TESTNUMBERSFILES")
 charDistribFile = uc.get("MIL_CHARDISTRIBFILE")
 
@@ -62,7 +52,8 @@ for name in names:
                 friendsList.append(friend)
 
 
-def buildBuckets(chars):
+def buildBucketBalancedList(chars):
+    # //TODO
     buckets = list()
     buckets.append([])
     buckets.append([])
@@ -80,24 +71,6 @@ def buildBuckets(chars):
     return buckets
 
 
-cluster = Cluster(
-    "couchbase://" + clusterName,
-    ClusterOptions(PasswordAuthenticator(cbadminuser, cbadminpassword)),
-)
-
-bucket = cluster.bucket(cbbucket)
-bucket.flush()
-
-query_result = cluster.query(
-    "SELECT COUNT(*) as size FROM system:indexes where keyspace_id='"
-    + cbbucket
-    + "' and name= '#primary'"
-)
-size = int(list(query_result)[0]["size"])
-if size == 0:
-    quit = QueryIndexManager(cluster)
-    quit.create_primary_index(cbbucket)
-
 print("Distrib")
 firstChars = {}
 for name in friends:
@@ -111,16 +84,28 @@ with open(charDistribFile, "w") as f:
     for k, v in sorted(firstChars.items()):
         f.write(str(k) + "," + str(v) + "\n")
 
-buildBuckets(firstChars)
+sAdmin = ShardAdmin(uc)
+sAdmin.recreateBuckets()
 
-collection = bucket.default_collection()
+bucketDistrib = buildBucketBalancedList(firstChars)
+shardList = sAdmin.getShardNames()
+for n in range(len(shardList)):
+    sName = shardList[n]
+    sAdmin.setPieceOfTheAction(sName, bucketDistrib[n])
+
+print("Save SHARDS:")
+sAdmin.saveToDB()
+
 print("Inject:" + str(len(friends)))
+numberOfFriends = len(friends)
 for name in friends:
-    # print(name, friends[name])
 
+    bucket = sAdmin.bucketForKey[name[0]]
+    collection = bucket.default_collection()
     collection.upsert(name, friends[name])
 
-print("Rand Pairs:" + str(len(friends)))
+
+print("1000 Random Pairs:" + str(numberOfFriends))
 with open(testnumbersfile, "w") as f:
     for _ in range(1000):
         one = random.randint(0, len(friends) - 1)
@@ -128,7 +113,10 @@ with open(testnumbersfile, "w") as f:
         while two == one:
             two = random.randint(0, len(friends) - 1)
         f.write(str(one) + "," + str(two) + "\n")
-
+    if one >= numberOfFriends:
+        print("Erf", one, numberOfFriends)
+    if two >= numberOfFriends:
+        print("Erf", two, numberOfFriends)
 
 print("Done")
 

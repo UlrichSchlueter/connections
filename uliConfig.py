@@ -11,6 +11,9 @@ class UliConfig:
     def get(self, key):
         return self.conf[key]
 
+    def getAsList(self, key):
+        return self.conf[key].split(",")
+
     def readConfig(self):
         self.conf = {}
         with open(self.file, "r") as f:
