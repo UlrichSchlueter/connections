@@ -1,7 +1,10 @@
 import random
 import json
 import os
+import sys
 import uliConfig
+import time
+
 from shardAdmin import Shard, ShardAdmin, Person
 
 
@@ -45,6 +48,10 @@ class Walker:
 
 uc = uliConfig.UliConfig("config.sourceMe")
 
+testReferenceData = uc.get("TEST_REFDATA")
+
+testResults = {}
+
 
 sAdmin = ShardAdmin(uc)
 sAdmin.getShardsFromDB()
@@ -64,6 +71,20 @@ with open("testnumbers", "r") as f:
 
 nTimes = min(nTimes, len(numbers) - 1)
 
+recordingMode = False
+if os.path.exists(testReferenceData):
+    with open(testReferenceData, "r") as f:
+        while True:
+            line = f.readline().strip()
+            if not line == "":
+                key, value = line.split(":")
+                testResults[key.strip()] = value.strip()
+            if line is None or line == "":
+                break
+else:
+    print("Recording Mode")
+    recordingMode = True
+
 
 while nTimes > 0:
     one, two = numbers[nTimes]
@@ -74,15 +95,42 @@ while nTimes > 0:
     firstWalker = Walker(sAdmin, firstID)
     secondWalker = Walker(sAdmin, secondID)
     nTimes -= 1
+    sys.stdout.write("\r" + str(nTimes))
 
     #
     while True:
-        firstWalker.walk()
+        # irstWalker.walk()
         # secondWalker.walk()
+        time.sleep(2)
         inter = firstWalker.visited.intersection(secondWalker.visited)
+
         if len(inter) > 0:
-            print("HHH", inter, firstWalker.walked, secondWalker.walked, one, two)
+            key = (one + "-" + two).strip()
+
+            value = (
+                str(inter)
+                + "-"
+                + str(firstWalker.walked)
+                + "-"
+                + str(secondWalker.walked)
+            ).strip()
+
+            if recordingMode == False:
+                if testResults[key] == value:
+                    pass
+                else:
+                    print(key, " Booo!!!!!!!")
+                    print(key, " : ", value, testResults[key])
+            else:
+                testResults[key] = value
+
             break
+
+
+if recordingMode == True:
+    with open(testReferenceData, "w") as f:
+        for key in testResults:
+            f.write(key + " : " + testResults[key] + "\n")
 
     # print(firstWalker)
     # print(secondWalker)

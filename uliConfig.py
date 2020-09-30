@@ -11,6 +11,9 @@ class UliConfig:
     def get(self, key):
         return self.conf[key]
 
+    def getInt(self, key):
+        return int(self.conf[key])
+
     def getAsList(self, key):
         return self.conf[key].split(",")
 
